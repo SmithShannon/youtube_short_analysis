@@ -1,39 +1,14 @@
-from twitchAPI.twitch import Twitch
 import os, requests
 import pandas as pd
+from pytube import YouTube as YT
+from bs4 import BeautifulSoup as bs
 
-
-def download_twitch_clips(client_id, client_secret, channel_name, output_path="."):
-    twitch = Twitch(client_id, client_secret)
-    twitch.authenticate_app([])
-
-    # Get the channel ID
-    channel_info = twitch.get_users(logins=[channel_name])
-    channel_id = channel_info[0]['id']
-
-    # Get the clips from the channel
-    clips_url = f"https://api.twitch.tv/helix/clips"
-    params = {"broadcaster_id": channel_id, "first": 100}  # Adjust 'first' based on your needs
-
-    headers = {"Client-ID": client_id}
-    response = requests.get(clips_url, params=params, headers=headers)
-    clips_data = response.json().get("data")
-
-    # Download each clip
-    for clip in clips_data:
-        clip_url = clip.get("url")
-        clip_title = clip.get("title")
-        clip_id = clip.get("id")
-
-        # Download the clip using requests
-        clip_response = requests.get(clip_url)
-
-        # Save the clip to the specified output path
-        clip_filename = f"{output_path}/clip_{clip_id}_{clip_title}.mp4"
-        with open(clip_filename, 'wb') as clip_file:
-            clip_file.write(clip_response.content)
-
-        print(f"Clip '{clip_title}' downloaded and saved as '{clip_filename}'")
+def download_clips(row,output_path="."):
+    print(row)
+    res = requests.get(row['Raw_Url'])
+    file = open (f"{output_path}/{row['Title']}_{row['Created On']}.mp4",'wb')
+    file.write(res.content)
+    file.close()
 
 
 if __name__ == "__main__":
@@ -41,6 +16,22 @@ if __name__ == "__main__":
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
     channel_name = 'mikodite_yvette'
-    output_path = 'twitch_clips/'
+    output_path = 'twitch_clips'
 
-    download_twitch_clips(client_id, client_secret, channel_name, output_path)
+    if 'twitch_clips' not in os.listdir(os.getcwd()):
+        os.mkdir('twitch_clips')
+
+    twitch_inventory = pd.read_csv('twitch_clip_inventory.csv')
+    # Download the clip using requests
+    youtube_inventory = pd.read_csv('youtube_inventory.csv')
+
+    twitch_youtubep1 = youtube_inventory[youtube_inventory['title'].str.contains('#Twitch')]
+    twitch_youtubep1['twitch_title'] = twitch_youtubep1['title'].str.split('|',expand=True)[0].str.strip()
+    twitch_youtube = twitch_youtubep1.merge(right=twitch_inventory,
+                                            how='inner',
+                                            left_on='twitch_title',
+                                            right_on='Title',
+                                            suffixes=('','_'))
+
+    twitch_youtube[twitch_youtube['views']>=1000].apply(download_clips,output_path=output_path,axis=1)
+    #download_clips(client_id, client_secret, channel_name, output_path)
